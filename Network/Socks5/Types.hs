@@ -9,6 +9,8 @@ module Network.Socks5.Types
     ( SocksVersion(..)
     , SocksCommand(..)
     , SocksMethod(..)
+    , SocksUsernamePassword(..)
+    , SocksUsernamePasswordAuthenticationFailure(..)
     , SocksHostAddress(..)
     , SocksAddress(..)
     , SocksReply(..)
@@ -39,8 +41,8 @@ data SocksCommand =
 
 -- | Authentication methods available on the SOCKS protocol.
 --
--- Only SocksMethodNone is effectively implemented, but
--- other value are enumerated for completeness.
+-- Only SocksMethodNone and SocksMethodUsernamePassword are effectively
+-- implemented, but other value are enumerated for completeness.
 data SocksMethod =
       SocksMethodNone
     | SocksMethodGSSAPI
@@ -48,6 +50,18 @@ data SocksMethod =
     | SocksMethodOther !Word8
     | SocksMethodNotAcceptable
     deriving (Show,Eq,Ord)
+
+-- | A username/password pair for client authentication using 'SocksMethodUsernamePassword'.
+data SocksUsernamePassword = SocksUsernamePassword
+    { socksUsername :: BC.ByteString
+    , socksPassword :: BC.ByteString
+    } deriving (Show,Eq)
+
+-- | Exception resulting from a username/password authentication failure.
+-- The meaning of the value inside is not specified by RFC-1929.
+newtype SocksUsernamePasswordAuthenticationFailure = SocksUsernamePasswordAuthenticationFailure
+    { socksUsernamePasswordAuthenticationFailureValue :: Word8
+    } deriving (Show,Eq, Data,Typeable)
 
 -- | A Host address on the SOCKS protocol.
 data SocksHostAddress =
@@ -114,6 +128,7 @@ data SocksVersionNotSupported = SocksVersionNotSupported
 
 instance Exception SocksError
 instance Exception SocksVersionNotSupported
+instance Exception SocksUsernamePasswordAuthenticationFailure
 
 instance Enum SocksCommand where
     toEnum 1 = SocksCommandConnect

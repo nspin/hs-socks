@@ -8,6 +8,8 @@
 module Network.Socks5.Wire
     ( SocksHello(..)
     , SocksHelloResponse(..)
+    , SocksUsernamePasswordRequest(..)
+    , SocksUsernamePasswordResponse(..)
     , SocksRequest(..)
     , SocksResponse(..)
     ) where
@@ -31,6 +33,12 @@ data SocksHello = SocksHello { getSocksHelloMethods :: [SocksMethod] }
 data SocksHelloResponse = SocksHelloResponse { getSocksHelloResponseMethod :: SocksMethod }
     deriving (Show,Eq)
 
+newtype SocksUsernamePasswordRequest = SocksUsernamePasswordRequest SocksUsernamePassword
+    deriving (Show,Eq)
+
+newtype SocksUsernamePasswordResponse = SocksUsernamePasswordResponse (Maybe SocksUsernamePasswordAuthenticationFailure)
+    deriving (Show,Eq)
+
 -- | Define a SOCKS requests
 data SocksRequest = SocksRequest
     { requestCommand  :: SocksCommand
@@ -45,13 +53,21 @@ data SocksResponse = SocksResponse
     , responseBindPort :: PortNumber
     } deriving (Show,Eq)
 
+getLengthPrefixed :: Get B.ByteString
+getLengthPrefixed = getWord8 >>= getByteString . fromIntegral
+
+putLengthPrefixed :: Putter B.ByteString
+putLengthPrefixed b = do
+    putWord8 $ fromIntegral (B.length b)
+    putByteString b
+
 getAddr 1 = SocksAddrIPV4 <$> getWord32host
-getAddr 3 = SocksAddrDomainName <$> (getWord8 >>= getByteString . fromIntegral)
+getAddr 3 = SocksAddrDomainName <$> getLengthPrefixed
 getAddr 4 = SocksAddrIPV6 <$> (liftM4 (,,,) getWord32host getWord32host getWord32host getWord32host)
 getAddr n = error ("cannot get unknown socket address type: " ++ show n)
 
 putAddr (SocksAddrIPV4 h)         = putWord8 1 >> putWord32host h
-putAddr (SocksAddrDomainName b)   = putWord8 3 >> putWord8 (fromIntegral $ B.length b) >> putByteString b
+putAddr (SocksAddrDomainName b)   = putWord8 3 >> putLengthPrefixed b
 putAddr (SocksAddrIPV6 (a,b,c,d)) = putWord8 4 >> mapM_ putWord32host [a,b,c,d]
 
 getSocksRequest 5 = do
@@ -90,6 +106,31 @@ instance Serialize SocksHelloResponse where
         case v of
             5 -> SocksHelloResponse . toEnum . fromIntegral <$> getWord8
             _ -> error "unsupported sock hello response version"
+
+instance Serialize SocksUsernamePasswordRequest where
+    put (SocksUsernamePasswordRequest req) = do
+        putWord8 1
+        putLengthPrefixed $ socksUsername req
+        putLengthPrefixed $ socksPassword req
+    get = do
+        v <- getWord8
+        case v of
+            1 -> SocksUsernamePasswordRequest <$> (SocksUsernamePassword <$> getLengthPrefixed <*> getLengthPrefixed)
+            _ -> error "unsupported sock username/password request version"
+
+instance Serialize SocksUsernamePasswordResponse where
+    put (SocksUsernamePasswordResponse resp) = do
+        putWord8 1
+        putWord8 $ maybe 0 socksUsernamePasswordAuthenticationFailureValue resp
+    get = do
+        v <- getWord8
+        case v of
+            1 -> do
+                n <- getWord8
+                return . SocksUsernamePasswordResponse $ case n of
+                    0 -> Nothing
+                    _ -> Just (SocksUsernamePasswordAuthenticationFailure n)
+            _ -> error "unsupported sock username/password request version"
 
 instance Serialize SocksRequest where
     put req = do

@@ -25,6 +25,7 @@ module Network.Socks5
     -- * Types
       SocksAddress(..)
     , SocksHostAddress(..)
+    , SocksUsernamePassword(..)
     , SocksReply(..)
     , SocksError(..)
     -- * Configuration
@@ -67,9 +68,19 @@ socksConnectWithSocket :: Socket       -- ^ Socket to use.
 socksConnectWithSocket sock serverConf destAddr = do
     serverAddr <- resolveToSockAddr (socksServer serverConf)
     connect sock serverAddr
-    r <- Cmd.establish sock [SocksMethodNone]
-    when (r == SocksMethodNotAcceptable) $ error "cannot connect with no socks method of authentication"
+    case socksUsernamePassword serverConf of
+        Nothing -> establishUsing SocksMethodNone
+        Just creds -> do
+            establishUsing SocksMethodUsernamePassword
+            Cmd.authenticateWithUsernamePassword_ sock creds
     Cmd.rpc_ sock (Connect destAddr)
+  where
+    establishUsing method = do
+        r <- Cmd.establish sock [method]
+        case r of
+            SocksMethodNotAcceptable -> error "cannot connect with desired socks method of authentication"
+            m | m /= method -> error "socks server chose unexpected method"
+            _ -> return ()
 
 -- | connect a new socket to a socks server and connect the stream on the
 -- server side to the 'SocksAddress' specified.

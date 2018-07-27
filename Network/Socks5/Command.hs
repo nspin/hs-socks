@@ -10,6 +10,8 @@
 --
 module Network.Socks5.Command
     ( establish
+    , authenticateWithUsernamePassword
+    , authenticateWithUsernamePassword_
     , Connect(..)
     , Command(..)
     , connectIPV4
@@ -39,6 +41,15 @@ establish :: Socket -> [SocksMethod] -> IO SocksMethod
 establish socket methods = do
     sendAll socket (encode $ SocksHello methods)
     getSocksHelloResponseMethod <$> runGetDone get (recv socket 4096)
+
+authenticateWithUsernamePassword :: Socket -> SocksUsernamePassword -> IO (Maybe SocksUsernamePasswordAuthenticationFailure)
+authenticateWithUsernamePassword socket creds = do
+    sendAll socket (encode $ SocksUsernamePasswordRequest creds)
+    SocksUsernamePasswordResponse resp <- runGetDone get (recv socket 4096)
+    return resp
+
+authenticateWithUsernamePassword_ :: Socket -> SocksUsernamePassword -> IO ()
+authenticateWithUsernamePassword_ socket creds = authenticateWithUsernamePassword socket creds >>= maybe (return ()) throwIO
 
 newtype Connect = Connect SocksAddress deriving (Show,Eq,Ord)
 

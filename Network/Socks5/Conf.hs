@@ -12,10 +12,12 @@ module Network.Socks5.Conf
     , socksPort
     , defaultSocksConf 
     , defaultSocksConfFromSockAddr
+    , defaultSocksConfWithUsernamePassword
+    , defaultSocksConfWithUsernamePasswordFromSockAddr
     ) where
 
 import Network.Socket
-import Network.Socks5.Types (SocksAddress(..), SocksHostAddress(..), SocksVersion(..))
+import Network.Socks5.Types (SocksAddress(..), SocksHostAddress(..), SocksVersion(..), SocksUsernamePassword(..))
 import qualified Data.ByteString.Char8 as BC
 
 -- | SOCKS configuration structure.
@@ -24,7 +26,8 @@ import qualified Data.ByteString.Char8 as BC
 data SocksConf = SocksConf
     { socksServer  :: SocksAddress -- ^ SOCKS Address
     , socksVersion :: SocksVersion -- ^ SOCKS version to use
-    }
+    , socksUsernamePassword :: Maybe SocksUsernamePassword -- ^ SOCKS username and password
+    } deriving (Show,Eq)
 
 -- | SOCKS Host
 socksHost :: SocksConf -> SocksHostAddress
@@ -36,14 +39,24 @@ socksPort conf = port where (SocksAddress _ port) = socksServer conf
 
 -- | defaultSocksConf create a new record, making sure
 -- API remains compatible when the record is extended.
-defaultSocksConf host port = SocksConf server SocksVer5
+defaultSocksConf = defaultSocksConf' Nothing
+
+defaultSocksConfWithUsernamePassword = defaultSocksConf' . Just
+
+defaultSocksConf' :: Maybe SocksUsernamePassword -> String -> PortNumber -> SocksConf
+defaultSocksConf' creds host port = SocksConf server SocksVer5 creds
     where server = SocksAddress haddr port
           haddr  = SocksAddrDomainName $ BC.pack host
 
 -- | same as defaultSocksConf except the server address is determined from a 'SockAddr'
 --
 -- A unix SockAddr will raises an error. Only Inet and Inet6 types supported
-defaultSocksConfFromSockAddr sockaddr = SocksConf server SocksVer5
+defaultSocksConfFromSockAddr = defaultSocksConfFromSockAddr' Nothing
+
+defaultSocksConfWithUsernamePasswordFromSockAddr = defaultSocksConfFromSockAddr' . Just
+
+defaultSocksConfFromSockAddr' :: Maybe SocksUsernamePassword -> SockAddr -> SocksConf
+defaultSocksConfFromSockAddr' creds sockaddr = SocksConf server SocksVer5 creds
     where server       = SocksAddress haddr port
           (haddr,port) = case sockaddr of
                              SockAddrInet p h      -> (SocksAddrIPV4 h, p)
